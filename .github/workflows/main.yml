@@ -1,0 +1,92 @@
+James IvesHome
+About
+Blog
+Projects
+Deploying to GitHub Pages using GitHub Actions
+Published 3 years ago
+7 min read
+7,517 views
+Overview
+Like many developers in this day and age I rely on a service provided by GitHub called GitHub Pages to deploy my side projects, experiments and blog. It is free, has custom domain support, and overall works really well for static sites. The only downside is that deploying a page can sometimes be a hassle depending on the code structure. In this article I'll talk about using GitHub Actions to simplify this process. I have also recorded a video if that's more your speed!
+
+
+In order to better illustrate lets take a basic Angular application and observe its package.json file. Here we have scripts for starting the application locally, and another for compiling the production ready build. When the build script is finished it pushes the contents into a subfolder called build which is what we use on our web server.
+
+package.json
+"scripts": {
+  "build": "ng build",
+  "start": "ng start",
+  "test": "ng test",
+}
+When maintaining a project like this on GitHub you'd usually push your source code to the main branch, ignoring any build artifacts. If you're leveraging GitHub Pages you'd typically have the compiled version of your application sitting on another branch such as docs or gh-pages which is what GitHub Pages would use to serve your application to the masses.
+
+Where this becomes tricky is when you need to actually commit that compiled code. For every change you make to your source code you need to manually commit the compiled code which adds another step to the process, increasing the chance that you may forget to do it. Additionally what if you don't have access to your computer and want to make a quick update on your phone or tablet but you can't re-build your application?
+
+Enter the GitHub Pages Deploy Action
+The best thing to do in my opinion is to automate this process using GitHub Actions. GitHub Actions is a CI/CD tool that allows you to trigger a workflow on any event that GitHub Supports. It's very similar to things like CircleCI and Jenkins except it has really great support for this sort of task in the form of community created actions.
+
+To get started simply create a .yml file in the .github/workflows directory, for this we'll call it deploy.yml. The following boilerplate will run a job called Build and Deploy whenever a commit is pushed to the main branch. Once the workflow runs it will use git to checkout the current branch so we can start processing our build.
+
+.github/workflows/deploy.yml
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    concurrency: ci-${{ github.ref }}
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v2
+Next up we'll need to add a step to compile our production ready build. For this we can add two new steps, one which configures our Node version to ensure it matches our application, followed by another that runs the necessary commands with npm. Depending on how your application is built you may need to add another step between these to install any sort of required environments such as Python or Java.
+
+.github/workflows/deploy.yml
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    concurrency: ci-${{ github.ref }}
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '16.13.2'
+
+      - name: Install and Build 🔧
+        run: |
+          npm ci
+          npm run build
+Lastly we need to add a step which will make the deployment for us. For this we can leverage the github-pages-deploy-action action, made by yours truly. In this step you'll need to configure the name of the folder where your compiled code gets pushed into, and then the branch you'd like to push that compiled code to. You can change the branch that GitHub Pages uses by going to your repository settings.
+
+.github/workflows/deploy.yml
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    concurrency: ci-${{ github.ref }}
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v2
+
+      - name: Install and Build 🔧 # This example project is built using npm and outputs the result to the 'build' folder. Replace with the commands required to build your project, or remove this step entirely if your site is pre-built.
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages # The branch the action should deploy to.
+          folder: build # The folder the action should deploy.
